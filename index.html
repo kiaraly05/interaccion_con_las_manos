@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Interacción con las manos — Pelota Pinch</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      margin: 0;
+      height: 100vh;
+      width: 100vw;
+      overflow: hidden;
+      background: #0b1120;
+      color: #e2e8f0;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial, sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+    }
+    h1 {
+      font-size: 1.7rem;
+      font-weight: 800;
+      letter-spacing: 0.4px;
+      color: #ffffff;
+      margin-bottom: 10px;
+    }
+    #canvasWrap {
+      display: flex;
+      justify-content: center;
+    }
+    canvas {
+      display: block;
+      max-width: 94vw;
+      max-height: 72vh;
+      border-radius: 18px;
+      background: #000;
+      box-shadow: 0 24px 60px rgba(0, 0, 0, 0.6);
+    }
+    #hud {
+      margin-top: 14px;
+      display: flex;
+      gap: 14px;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.95rem;
+    }
+    .chip {
+      padding: 6px 14px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.07);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      color: #cbd5e1;
+    }
+    .chip strong { color: #ffffff; }
+    #pinchState strong { color: #00e5c8; }
+    #colorOptions {
+      margin-bottom: 10px;
+      display: flex;
+      gap: 10px;
+      justify-content: center;
+      align-items: center;
+    }
+    .colorChip {
+      padding: 6px 16px;
+      border-radius: 10px;
+      border: 2px solid transparent;
+      font-size: 0.85rem;
+      font-weight: 700;
+      cursor: pointer;
+      background: rgba(255,255,255,0.06);
+      color: #cbd5e1;
+      transition: all 0.2s;
+    }
+    .colorChip:hover { background: rgba(255,255,255,0.15); color: #ffffff; }
+    .colorChip.active {
+      border-color: #ffffff;
+      color: #ffffff;
+      background: rgba(255,255,255,0.18);
+      box-shadow: 0 0 0 3px rgba(255,255,255,0.12);
+    }
+    .colorChip.turquesa { border-color: #00e5c8; color: #00e5c8; }
+    .colorChip.morado { border-color: #a855f7; color: #a855f7; }
+    .colorChip.fucsia { border-color: #ff00ff; color: #ff00ff; }
+    #hint {
+      margin-top: 12px;
+      margin-bottom: 22px;
+      color: #94a3b8;
+      font-size: 0.95rem;
+      text-align: center;
+      max-width: 640px;
+      line-height: 1.5;
+    }
+    #logs {
+      position: fixed;
+      bottom: 10px;
+      left: 10px;
+      right: 10px;
+      background: rgba(0, 0, 0, 0.55);
+      color: #86efac;
+      font-family: ui-monospace, SFMono-Regular, monospace;
+      font-size: 11px;
+      padding: 8px 10px;
+      border-radius: 8px;
+      max-height: 130px;
+      overflow-y: auto;
+      pointer-events: none;
+      z-index: 5;
+    }
+    #overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(7, 12, 24, 0.85);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 40;
+    }
+    #overlay.hidden { display: none !important; }
+    button {
+      padding: 12px 26px;
+      font-size: 1rem;
+      cursor: pointer;
+      background: #22d3ee;
+      border: none;
+      color: #020617;
+      font-weight: 700;
+      border-radius: 10px;
+      box-shadow: 0 10px 25px rgba(34, 211, 238, 0.35);
+    }
+    button:hover { background: #67e8f9; }
+    button:disabled { background: #64748b; color: #e2e8f0; cursor: not-allowed; box-shadow: none; }
+    #status { margin-top: 10px; font-size: 0.95rem; color: #94a3b8; text-align: center; max-width: 420px; }
+    .small { color: #64748b; font-size: 0.8rem; margin-top: 6px; }
+  </style>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/ml5@0.12.2/dist/ml5.min.js" onerror="alert('ml5 no cargó. Revisá tu conexión a internet o probá con otra red.')"></script>
+</head>
+<body>
+  <h1 id="title">Interacción con las manos</h1>
+  <div id="colorOptions" role="radiogroup" aria-label="Color de la pelota">
+    <button type="button" class="colorChip active" data-color="#00e5c8" aria-pressed="true">Turquesa</button>
+    <button type="button" class="colorChip" data-color="#a855f7" aria-pressed="false">Morado</button>
+    <button type="button" class="colorChip" data-color="#ff00ff" aria-pressed="false">Fucsia</button>
+  </div>
+  <div id="canvasWrap"></div>
+  <div id="hud" role="status" aria-live="polite">
+    <span class="chip">Tamaño: <strong id="size">--</strong></span>
+    <span class="chip" id="pinchState">Pinch: <strong>no</strong></span>
+  </div>
+  <p id="hint">Ejercicio: junta el pulgar y el índice (pinch) para agrandar o achicar la pelota.</p>
+  <div id="overlay">
+    <button id="startBtn">Iniciar cámara</button>
+    <div id="status">Listo para empezar.</div>
+    <div class="small">Abrí la consola (F12) para ver el detalle.</div>
+  </div>
+  <div id="logs"></div>
+
+<script>
+  let video;
+  let handpose;
+  let predictions = [];
+  let modelReady = false;
+  let cameraStarted = false;
+
+  // Ball / pinch state
+  let ballColor = '#00e5c8'; // color elegido por el usuario
+  let ballSize = 100;        // rendered (smoothed) size
+  let targetSize = 100;      // target size coming from the pinch
+  let restingSize = 100;
+  let minSize = 18;   // pequenita con el pinch, pero nunca invisible
+  let maxSize = 300;
+  let pinchThreshold = 70;   // px between thumb tip and index tip (640x480 space)
+  let pinchHysteresis = 22;  // avoids flicker right on the threshold edge
+  let isPinching = false;
+  let smoothFactor = 0.42;   // higher = faster response, less lag
+
+  const startBtn = document.getElementById('startBtn');
+  const statusEl = document.getElementById('status');
+  const sizeEl = document.getElementById('size');
+  const pinchStateEl = document.getElementById('pinchState');
+  const overlay = document.getElementById('overlay');
+  const logsEl = document.getElementById('logs');
+  const colorChips = document.querySelectorAll('.colorChip');
+
+  function setBallColor(color) {
+    ballColor = color;
+    colorChips.forEach(chip => {
+      const isActive = chip.dataset.color === color;
+      chip.classList.toggle('active', isActive);
+      chip.setAttribute('aria-pressed', isActive);
+    });
+  }
+
+  colorChips.forEach(chip => {
+    chip.addEventListener('click', () => setBallColor(chip.dataset.color));
+  });
+
+  const logs = [];
+  function log(msg) {
+    const line = '[' + new Date().toLocaleTimeString() + '] ' + msg;
+    logs.push(line);
+    if (logs.length > 20) logs.shift();
+    logsEl.textContent = logs.join('\n');
+    console.log(line);
+  }
+  function err(msg) { log('ERROR: ' + msg); console.error(msg); }
+  function setStatus(msg) { statusEl.textContent = msg; log(msg); }
+
+  window.addEventListener('DOMContentLoaded', () => {
+    log('DOM cargado. p5: ' + (typeof p5 !== 'undefined'));
+    log('ml5: ' + (typeof ml5 !== 'undefined'));
+    startBtn.addEventListener('click', init);
+  });
+
+  async function init() {
+    startBtn.disabled = true;
+    startBtn.textContent = 'Iniciando...';
+    setStatus('Pidiendo acceso a la cámara...');
+
+    try {
+      if (typeof p5 === 'undefined') throw new Error('p5.js no cargó');
+      if (typeof ml5 === 'undefined') throw new Error('ml5.js no cargó');
+
+      log('Creando captura de video...');
+      video = createCapture(VIDEO);
+      video.size(640, 480);
+      video.hide();
+
+      log('Inicializando ml5.handpose...');
+      handpose = ml5.handpose(video, onModelReady);
+      handpose.on('predict', gotResults);
+
+      cameraStarted = true;
+      setStatus('Cargando modelo de manos (puede tardar unos segundos)...');
+    } catch (e) {
+      err(e.message);
+      setStatus('Error: ' + e.message);
+      startBtn.disabled = false;
+      startBtn.textContent = 'Reintentar';
+    }
+  }
+
+  function onModelReady() {
+    log('Modelo de manos listo');
+    modelReady = true;
+    overlay.classList.add('hidden');
+    setStatus('Modelo listo. Mostrá tus manos a la cámara.');
+  }
+
+  function gotResults(results) {
+    predictions = results;
+    if (predictions.length > 0) {
+      log('Manos detectadas: ' + predictions.length);
+    }
+  }
+
+  function setup() {
+    const cnv = createCanvas(640, 480);
+    cnv.parent('canvasWrap');
+  }
+
+  function draw() {
+    background(12, 18, 30);
+
+    if (!cameraStarted || !video) {
+      textAlign(CENTER, CENTER);
+      textSize(18);
+      fill(160, 175, 195);
+      text('Presioná "Iniciar cámara"', width / 2, height / 2);
+      return;
+    }
+
+    // Espejo horizontal (selfie) para que no te confunda
+    push();
+    translate(width, 0);
+    scale(-1, 1);
+    image(video, 0, 0, width, height);
+    pop();
+
+    let pinchingNow = false;
+
+    if (predictions.length > 0 && modelReady) {
+      const hand = predictions[0];
+      const thumb = hand.annotations.thumb;
+      const indexFinger = hand.annotations.indexFinger;
+
+      const tipThumb = thumb[thumb.length - 1];
+      const tipIndex = indexFinger[indexFinger.length - 1];
+
+      const d = dist(tipThumb[0], tipThumb[1], tipIndex[0], tipIndex[1]);
+
+      // Hysteresis so the pinch state does not flicker on the threshold edge
+      if (!isPinching && d < pinchThreshold) {
+        isPinching = true;
+      } else if (isPinching && d > pinchThreshold + pinchHysteresis) {
+        isPinching = false;
+      }
+      pinchingNow = isPinching;
+
+      // Target size: mano abierta (sin pinch) = pelota grande; al hacer pinch se encoge.
+      // Cuanto más fuerte es el pinch (dedos más juntos), más pequeña se pone.
+      if (isPinching) {
+        const strength = 1 - constrain(d / pinchThreshold, 0, 1);
+        targetSize = lerp(maxSize, minSize, strength);
+      } else {
+        targetSize = maxSize;
+      }
+
+      targetSize = constrain(targetSize, minSize, maxSize);
+
+      // Smooth the size so the ball grows/shrinks fluidly instead of jumping
+      ballSize = lerp(ballSize, targetSize, smoothFactor);
+
+      sizeEl.textContent = int(ballSize);
+      pinchStateEl.textContent = isPinching ? 'SÍ' : 'no';
+      pinchStateEl.style.color = isPinching ? '#00e5c8' : '#cbd5e1';
+    }
+
+    // Ball always perfectly centered, color chosen by the user. Never red.
+    fill(ballColor);
+    noStroke();
+    ellipse(width / 2, height / 2, ballSize, ballSize);
+  }
+</script>
+</body>
+</html>
